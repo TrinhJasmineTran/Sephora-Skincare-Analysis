@@ -1,0 +1,512 @@
+---
+title: "SEPHORA SKINCARE ANALYSIS"
+runtime: shiny
+output: 
+  flexdashboard::flex_dashboard:
+    theme:
+      version: 3
+      bg: "#9BCD9B"
+      fg: "#2F4F4F"
+      primary: "#9F79EE"
+      navbar-bg: "#2F4F4F"
+---
+
+```{r, global, include=FALSE, message=FALSE}
+library(readr)
+library(knitr)
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(shiny)
+library(flexdashboard)
+library(lubridate)
+library(tidytext)
+library(wordcloud)
+library(treemapify)
+
+Big_data <- read_csv("~/Mscs 264 F22/Project/Tran_Thombare/Big_data.csv")
+
+brand_data <- read_csv("~/Mscs 264 F22/Project/Tran_Thombare/brand_data.csv")
+
+Cruelty_status_data <- read_csv("~/Mscs 264 F22/Project/Tran_Thombare/Cruelty_status_data.csv")
+
+cruelty_free_data <- read_csv("~/Mscs 264 F22/Project/Tran_Thombare/cruelty_free_data.csv")
+
+non_cruelty_free_data <- read_csv("~/Mscs 264 F22/Project/Tran_Thombare/non_cruelty_free_data.csv")
+```
+
+
+About
+==========================
+
+#### Authors
+
+*Bhagya Thombare & Jasmine Tran*
+
+
+#### Background Information
+
+
+We are looking at skincare products, particularly at Sephora. Our goal of this project is to evaluate the skincare products from cruelty-free and on-cruelty-free brands at Sephora in terms of *price*, *ingredients*, *skin types*, and *popularity*. Many times consumers have to think about their budget, quality of product and its effectiveness in order to choose appropriate product for themselves. This platform will give the consumers ability to navigate and determine what products might work best for them depending on ingredient choices, skin types and price ranges. 
+
+
+Data source:  [Kaggle - Cosmetics Dataset](https://www.kaggle.com/datasets/kingabzpro/cosmetics-datasets), [Kaggle - Cruelty-Free Brands](https://www.kaggle.com/datasets/mhapich/crueltyfree-brands)
+
+
+
+Column {data-width = 400}
+-------------------------
+
+```{r, echo=FALSE}
+
+renderImage({
+    # Return a list
+    list(src = "front_picture.jpg", width = 450, height = 525)
+  })
+```
+
+
+Column 
+-------------------------
+
+```{r, echo=FALSE}
+remove_reg <- "&amp;|&lt;|&gt;"
+
+token_Cruelty_data<- Cruelty_status_data %>% 
+  mutate(text = str_remove_all(Name, remove_reg)) %>%
+  unnest_tokens(word, Name, token = "words") %>%
+  filter(!word %in% stop_words$word,                          
+         !word %in% str_remove_all(stop_words$word, "'"),
+         str_detect(word, "[a-z]"))
+  
+token_Cruelty_data %>%
+anti_join(stop_words) %>%
+  count(word) %>%
+  with(wordcloud(words = word, freq = n, 
+          max.words=150, random.order=FALSE, rot.per=0.35, 
+          colors=brewer.pal(8, "Dark2"), scale = c(5, 0.8)))
+```
+
+
+Price  
+==========================
+
+Inputs {.sidebar}
+-------------------------
+
+```{r, echo=FALSE}
+inputPanel(
+  selectInput("n_breaks", label = "Number of bins:",
+              choices = c(10, 20, 35, 50), selected = 20),
+  
+   inputPanel(selectInput("bl", label = "Product Labels",
+              choices = c("Treatment" = "Treatment", "Moisturizer" = "Moisturizer", "Eye Cream" = "Eye cream", "Cleanser" = "Cleanser", "Sun Protection" = "Sun protect", "Face Mask" = "Face Mask"))),
+
+
+  sliderInput("bw_adjust", label = "Bandwidth adjustment:",
+              min = 0.2, max = 2, value = 1, step = 0.2))
+
+
+inputPanel(selectInput("bc", label = "Brand Category",
+              choices = c("Cruelty free" = "cruelty-free", "Non cruelty free" = "non-cruelty-free")))
+
+
+p("These figures explore price of skincare products by label using density plot and boxplot. We can input the product labels and brand category to find how price varies across different labels with treatment being the most expensive one. Price of face mask, sun protection, and cleanser are mostly spread out under $100. For moisturizer and eye cream the price starts as low as $20 and goes up to $300.")
+```
+
+column {data-width = 400}
+-------------------------
+
+```{r, echo=FALSE}
+renderPlot({
+  if(input$bl == "Treatment")
+Cruelty_status_data %>%
+  filter(Label == "Treatment") %>%
+  ggplot(mapping = aes(x = Price)) +
+     geom_histogram (aes(y=..density..), fill = "pink2", color = "white", bins = input$n_breaks) +
+     geom_density(aes(y=..density..),  adjust = input$bw_adjust, color = "mediumorchid4") +
+   ylab("Density") + xlab("Price of Product") + ggtitle("Histogram of Price Frequency for Products") +
+   theme_bw() + theme(plot.title=element_text(size=15)) +
+    theme(text = element_text(size=13)) 
+  
+  
+else
+  Cruelty_status_data %>%
+    filter(Label %in% c(input$bl)) %>%
+     ggplot(mapping = aes(x = Price)) +
+     geom_histogram (aes(y=..density..), fill = "pink2", color = "white", bins = input$n_breaks) +
+    geom_density(aes(y=..density..),  adjust = input$bw_adjust, color = "mediumorchid4" ) +
+    ylab("Density") + xlab("Price of Product") + ggtitle("Histogram of Price Frequency for Products") +
+   theme_bw() + theme(plot.title=element_text(size=15)) +
+     theme(text = element_text(size=13)) 
+  
+})
+```
+
+
+```{r, echo = FALSE}
+renderPlot({
+if(input$bc == "cruelty-free")
+   cruelty_free_data %>%
+    mutate(Label = fct_reorder(Label, Price)) %>%
+  ggplot(mapping = aes(x = Price)) +
+    geom_boxplot(aes(y = Label, fill = Label), show.legend = FALSE) +
+    labs(x = "Price of Products (USD)",
+y = "Type of Products",
+title = "Cruelty-free Products Price Range") +
+  theme(plot.title = element_text(hjust = 0.5)) + 
+    scale_fill_brewer(palette = "Pastel1") +
+    theme(text = element_text(size=13)) + 
+    theme(panel.grid.minor.x = element_blank())
+
+else
+   non_cruelty_free_data %>%
+    mutate(Label = fct_reorder(Label, Price)) %>%
+  ggplot(mapping = aes(x = Price)) +
+    geom_boxplot(aes(y = Label, fill = Label), show.legend = FALSE) +
+    labs(x = "Price of Products (USD)",
+y = "Type of Products",
+title = "Non Cruelty-free Products Price Range") +
+  theme(plot.title = element_text(hjust = 0.5)) + 
+    scale_fill_brewer(palette = "Pastel1") +
+    theme(text = element_text(size=13)) + 
+    theme(panel.grid.minor.x = element_blank())
+})
+```
+
+
+
+Ingredients 
+==========================
+
+column {data-width = 400}
+-------------------------
+```{r}
+strong("Ingredients Takeaways:")
+p("Here we can see top 10 most commonly-used ingredients in the skincare products. Water is primarily used as a solvent in skincare products, dissolving other ingredients that gives the product texture. Glycerin serves as a humectant that moisturizes and softens the skin by drawing water from the atmosphere for hydration.")
+p("In the treemap we can se there are few different ingredients that are commanly used by non-cruelty-free brands. One of them is Dimethicone  ")
+p()
+```
+
+```{r echo = FALSE}
+Ingredients <- Cruelty_status_data %>%
+  mutate(Ingredients = strsplit(as.character(Ingredients), ", ")) %>% 
+    unnest(Ingredients)
+
+Ingredients %>%
+  count(Ingredients) %>%
+  slice_max(n, n = 10) %>%
+  mutate(Ingredients = fct_reorder(Ingredients, n)) %>%
+ggplot(mapping = aes(x = n, y = Ingredients, fill = Ingredients)) +
+geom_bar(stat = "identity", show.legend = FALSE) +
+   labs(x = "Number of products with the Ingredient",
+y = "Ingredient Name",
+title = "Top 10 Ingredients in Skincare Products") +
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  theme(text = element_text(size=12)) + 
+  scale_fill_brewer(palette = "Set3")+
+  theme(panel.grid.minor.x = element_blank())
+```
+
+column {data-width = 400}
+-------------------------
+
+```{r, echo=FALSE}
+Ingredients %>%
+  filter(brand_category == "cruelty-free") %>%
+  count(Ingredients) %>%
+  slice_max(n, n = 10) %>%
+ggplot(mapping = aes(area = n, fill = Ingredients, label = paste(n, Ingredients))) +
+geom_treemap() +
+    geom_treemap_text() +
+    scale_fill_brewer(palette = "Pastel1") +
+  labs(title = "Most Used Ingredients in Cruelty-free Brands") +
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  theme(text = element_text(size=10)) + 
+  scale_fill_brewer(palette = "Set3")+
+  theme(panel.grid.minor.x = element_blank())
+```
+
+
+```{r, echo=FALSE}
+Ingredients %>%
+  filter(brand_category == "non-cruelty-free") %>%
+  count(Ingredients) %>%
+  slice_max(n, n = 10) %>%
+ggplot(mapping = aes(area = n, fill = Ingredients, label = paste(n, Ingredients))) +
+geom_treemap() +
+    geom_treemap_text() +
+    scale_fill_brewer(palette = "Pastel1") +
+  labs(title = "Most Used Ingredients in Non-cruelty-free Brands") +
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  theme(text = element_text(size=10)) + 
+  scale_fill_brewer(palette = "Set3")+
+  theme(panel.grid.minor.x = element_blank())
+```
+
+
+Skin Types
+==========================
+
+column
+-------------------------
+```{r, echo = FALSE}
+Cruelty_status_data %>%
+    filter(Normal == 1) %>%
+    group_by(brand_category) %>%
+    summarise(n = n()) %>%
+    mutate(prop_brand_type = n/sum(n),
+           labels = scales::percent(prop_brand_type)) %>%
+  ggplot(mapping = aes(x = "", y = prop_brand_type, fill = brand_category)) +
+    geom_col(color = "white") +
+  geom_label(aes(label = labels),
+            position = position_stack(vjust = 0.2),
+            show.legend = FALSE) +
+  guides(fill = guide_legend(title = "Brand Categories")) +
+  scale_fill_brewer(palette = "Pastel1") +
+  coord_polar(theta = "y") + 
+  theme_void() +
+    labs( title = "Product Percentage for Normal Skin")
+```
+
+```{r, echo=FALSE}
+ Cruelty_status_data %>%
+    filter(Combination == 1) %>%
+    group_by(brand_category) %>%
+    summarise(n = n()) %>%
+    mutate(prop_brand_type = n/sum(n),
+           labels = scales::percent(prop_brand_type)) %>%
+  ggplot(mapping = aes(x = "", y = prop_brand_type, fill = brand_category)) +
+    geom_col(color = "white") +
+  geom_label(aes(label = labels),
+            position = position_stack(vjust = 0.2),
+            show.legend = FALSE) +
+  guides(fill = guide_legend(title = "Brand Categories")) +
+  scale_fill_brewer(palette = "Pastel1") +
+  coord_polar(theta = "y") + 
+  theme_void() +
+    labs( title = "Product Percentage for Combination (Oily & Dry) Skin")
+```
+
+column
+-------------------------
+
+```{r echo = FALSE}
+Cruelty_status_data %>%
+    filter(Sensitive == 1) %>%
+    group_by(brand_category) %>%
+    summarise(n = n()) %>%
+    mutate(prop_brand_type = n/sum(n),
+           labels = scales::percent(prop_brand_type)) %>%
+  ggplot(mapping = aes(x = "", y = prop_brand_type, fill = brand_category)) +
+    geom_col(color = "white") +
+  geom_label(aes(label = labels),
+            position = position_stack(vjust = 0.5),
+            show.legend = FALSE) +
+  guides(fill = guide_legend(title = "Brand Categories")) +
+  scale_fill_brewer(palette = "Pastel1") +
+  coord_polar(theta = "y") + 
+  theme_void() +
+    labs( title = "Product Percentage for Sensitive Skin")
+
+```
+
+```{r}
+strong("Skintype Takeaways:")
+p("The pie chart poin our the fact that sephora has very limited product assortment towards cruelty-free brands. Coustmers with cruelty-free product preference have limited choice when it comes to buying skincare regardless of there skin type.")
+```
+
+
+Product Popularity 
+==========================
+
+Row
+-------------------------
+
+*Average Rank for Sun Protect*
+```{r}
+Rating_for_sp <- function() {
+Cruelty_status_data %>%
+  group_by(Label) %>%
+  summarise(average_Rank = mean(Rank)) %>%
+  filter(Label == "Sun protect")
+  
+  { Sunscreen = c(4.05)
+    
+  }
+
+  
+}
+
+
+sun_protect_rank <- Rating_for_sp()
+gauge(sun_protect_rank, min = 0, max = 5, gaugeSectors(
+  success = c(3.5, 5), warning = c(1,2.5), danger = c(0, 1), colors = "#195670"
+)) 
+```
+
+*Average Rank for Treatments*
+```{r}
+Rating_for_treatment <- function() {
+  treatment <- Cruelty_status_data %>%
+  group_by(Label, ) %>%
+  summarise(average_Rank = mean(Rank)) %>%
+  filter(Label == "Treatment")
+  
+  { Treatment = 4.22
+    
+  }
+
+  
+}
+
+Treatment_rank <- Rating_for_treatment()
+gauge(Treatment_rank, min = 0, max = 5, gaugeSectors(
+  success = c(3.5, 5), warning = c(1,2.5), danger = c(0, 1), colors = "#FF7F50"
+))
+```
+
+*Average Rank  for Moisturizer*
+```{r}
+Rank_Moisturizer <- function() {
+Cruelty_status_data %>%
+  group_by(Label, ) %>%
+  summarise(average_Rank = mean(Rank)) %>%
+  filter(Label == "Moisturizer")
+  
+  { Moisture = 4.24
+    
+  }
+
+  
+}
+
+Moisturizer_rank <- Rank_Moisturizer()
+gauge(Moisturizer_rank, min = 0, max = 5, gaugeSectors(
+  success = c(3.5, 5), warning = c(1,2.5), danger = c(0, 1), colors = "#FFBF00"
+))
+```
+
+Row
+-------------------------
+
+*Average Rank for Face Mask*
+```{r}
+Rank_FM <- function() {
+Cruelty_status_data %>%
+  group_by(Label, ) %>%
+  summarise(average_Rank = mean(Rank)) %>%
+  filter(Label == "Face Mask")
+  
+  { FACE_MASK = 4.17
+    
+  }
+
+  
+}
+
+Face_mask_rank <- Rank_FM()
+gauge(Face_mask_rank, min = 0, max = 5, gaugeSectors(
+  success = c(3.5, 5), warning = c(1,2.5), danger = c(0, 1), colors = "#CCCCFF"
+))
+```
+
+*Average Rank for Eye Cream*
+```{r}
+Rank_Eyecream <- function() {
+  Cruelty_status_data %>%
+  group_by(Label, ) %>%
+  summarise(average_Rank = mean(Rank)) %>%
+  filter(Label == "Eye cream")
+  
+  { EC = 3.81
+    
+  }
+
+  
+}
+
+Eye_cream_rank <- Rank_Eyecream()
+gauge(Eye_cream_rank, min = 0, max = 5, gaugeSectors(
+  success = c(3.5, 5), warning = c(1,2.5), danger = c(0, 1), colors = "#DE3163"
+))
+```
+
+*Average Rank for Cleanser*
+```{r, echo = FALSE}
+Rank_cleanser <- function() {
+Cruelty_status_data %>%
+  group_by(Brand) %>%
+  filter(Label == "Cleanser") %>%
+    summarise(average_Rank = mean(Rank))
+  
+  { cleanser = 4.31
+  
+}
+  
+}
+
+cleanser_rank <- Rank_cleanser()
+gauge(cleanser_rank, min = 0, max = 5, gaugeSectors(
+  success = c(3.5, 5), warning = c(1,2.5), danger = c(0, 1), colors = "#9FE2BF"
+))
+```
+
+
+High-End Brands
+==========================
+
+Inputs {.sidebar}
+-------------------------
+
+```{r, echo=FALSE}
+inputPanel(selectInput("lb", label = "Product Labels",
+              choices = c("Treatment" = "Treatment", "Moisturizer" = "Moisturizer", "Eye Cream" = "Eye cream", "Cleanser" = "Cleanser", "Sun Protection" = "Sun protect", "Face Mask" = "Face Mask")))
+```
+
+column 
+-------------------------
+
+```{r}
+renderPlot({
+  if(input$lb == "Treatment")
+Cruelty_status_data %>%
+  filter(Label == "Treatment") %>%
+  group_by(Brand) %>%
+  summarise(avg_price = mean(Price), 
+            avg_rank = mean(Rank)) %>%
+  arrange(desc(avg_price)) %>%
+  slice_head(n = 10) %>%
+  ggplot(mapping = aes(x = avg_price, y = avg_rank), show.legend = FALSE) +
+ geom_point() +
+   geom_label(aes(label = Brand, fill = Brand), color = "white", fontface = "bold") +
+   labs(x = "Average Price",
+y = "Average Rank",
+title = "Top 10 Brands Treatment Average Price vs Average Rank") +
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  theme(text = element_text(size=18)) + theme(panel.grid.minor.x = element_blank())
+  
+else
+  Cruelty_status_data %>%
+    filter(Label %in% c(input$lb)) %>%
+    group_by(Brand) %>%
+  summarise(avg_price = mean(Price), 
+            avg_rank = mean(Rank)) %>%
+  arrange(desc(avg_price)) %>%
+  slice_head(n = 10) %>%
+  ggplot(mapping = aes(x = avg_price, y = avg_rank), show.legend = FALSE) +
+  geom_point() +
+    geom_label(aes(label = Brand, fill = Brand), color = "white", fontface = "bold") +
+   labs(x = "Average Price",
+y = "Average Rank",
+title = "Top 10 Brands Treatment Average Price vs Average Rank") +
+  theme(plot.title = element_text(hjust = 0.5)) + 
+    theme(text = element_text(size=18)) + theme(panel.grid.minor.x = element_blank())
+})
+```
+
+
+```{r}
+strong("High-end Brands Takeaways:")
+p("From the above plot we can see that price of the product does not necessary reflect in its rank. There are few luxurious brands with low ranking, and brands that are relatively affordable have high ranking. This indicate that product ranking is not based on the price, but its effectivness and if it is suitable for individual's skin.")
+```
